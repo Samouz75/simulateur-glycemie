@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulateur de Lecteur de Glycémie</title>
+  <style>
+    @font-face {
+      font-family: 'DSEG7Classic-Bold';
+      src: url('DSEG7Classic-Bold.woff2') format('woff2');
+      font-weight: bold;
+      font-style: normal;
+      font-display: swap;
+    }
+    *{box-sizing:border-box}
+    body{font-family:system-ui,sans-serif;background:#111;margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-direction:column}
+    button{cursor:pointer}
+    #setup{text-align:center}
+    #setup h1{font-size:1.8rem;margin-bottom:1rem;font-weight:600}
+    #glyInput{width:220px;padding:10px;font-size:1.2rem;text-align:center;border:1px solid #999;border-radius:8px}
+    .btn{margin-top:1rem;padding:.75rem 2rem;background:#2e7d32;color:#fff;border:none;border-radius:8px;font-size:1rem;transition:opacity .2s ease}
+    .btn:hover{opacity:.9}
+    .alert{color:#c62828;margin-top:.8rem;font-weight:500}
+    .device{width:100vw;height:100vh;background:#111;border-radius:0;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden}
+    .device::before{display:none}
+    .device-screen{width:90%;height:50%;background:#555;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;margin-bottom:1rem;overflow:hidden}
+    .value{font-family:'DSEG7Classic-Bold',monospace;font-size:4.5rem;color:#fff;letter-spacing:.15rem;line-height:1}
+    .unit{font-family:'DSEG7Classic-Bold',monospace;font-size:.6rem;color:#fff;position:absolute;bottom:52px;right:18px;letter-spacing:-.05rem}
+    .clock{font-family:'DSEG7Classic-Bold',monospace;font-size:1rem;color:#fff;position:absolute;bottom:10px;text-align:center;width:100%}
+    .device-buttons{display:flex;gap:1rem;margin-bottom:1rem;flex-shrink:0}
+    .power-btn,.read-btn{background:#2e7d32;color:#fff;border:none;padding:.5rem 1.2rem;border-radius:8px;font-size:1rem;transition:opacity .2s ease}
+    .power-btn:hover,.read-btn:hover{opacity:.9}
+    .power-btn:disabled,.read-btn:disabled{background:#7e7e7e;cursor:not-allowed}
+    /* simple flash animation */
+    @keyframes flashAll{0%{opacity:0}50%{opacity:1}100%{opacity:0}}
+    .flash{animation:flashAll .6s ease-in-out 1}
+  </style>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+  <div id="setup">
+    <h1>Programmer la glycémie</h1>
+    <input id="glyInput" placeholder="Valeur (mg/dL, HI, LO, ERR)" inputmode="text">
+    <br>
+    <button id="startBtn" class="btn">Démarrer la simulation</button>
+    <div id="setupAlert" class="alert"></div>
+  </div>
+
+  <div id="device" class="device" hidden>
+    <div class="device-screen">
+      <div id="displayValue" class="value" hidden>000</div>
+      <div id="displayUnit" class="unit" hidden>mg/dL</div>
+      <div id="displayClock" class="clock" hidden>--:--</div>
+    </div>
+    <div class="device-buttons">
+      <button id="powerBtn" class="power-btn">⏻</button>
+      <button id="readBtn" class="read-btn" disabled>Lecture</button>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const setup=document.getElementById('setup');
+      const glyInput=document.getElementById('glyInput');
+      const startBtn=document.getElementById('startBtn');
+      const setupAlert=document.getElementById('setupAlert');
+      const device=document.getElementById('device');
+      const powerBtn=document.getElementById('powerBtn');
+      const readBtn=document.getElementById('readBtn');
+      const displayValue=document.getElementById('displayValue');
+      const displayUnit=document.getElementById('displayUnit');
+      const displayClock=document.getElementById('displayClock');
+      let programmedValue=null;
+      let deviceOn=false;
+      let booting=false;
+
+      function isValidInput(v){
+        v=v.trim().toUpperCase();
+        if(v==='HI'||v==='LO'||v==='ERR') return true;
+        return /^\d+(?:[.,]\d{1,2})?$/.test(v);
+      }
+
+      function updateClock(){const n=new Date();displayClock.textContent=`${n.getHours().toString().padStart(2,'0')}:${n.getMinutes().toString().padStart(2,'0')}`}
+
+      function bootAnimation(){
+        booting=true;
+        readBtn.disabled=true;
+        displayValue.hidden=false;
+        displayValue.textContent='888';
+        displayUnit.hidden=true;
+        displayValue.classList.add('flash');
+        setTimeout(()=>{
+          displayValue.classList.remove('flash');
+          displayValue.hidden=true;
+          displayUnit.hidden=true;
+          readBtn.disabled=false;
+          booting=false;
+        },650);
+      }
+
+      startBtn.addEventListener('click',()=>{
+        const raw=glyInput.value.trim();
+        if(!isValidInput(raw)){
+          setupAlert.textContent='Entrez un nombre valide ou "HI" / "LO" / "ERR"';
+          return;
+        }
+        setupAlert.textContent='';
+        programmedValue=raw.toUpperCase();
+        setup.hidden=true;
+        device.hidden=false;
+        deviceOn=false;
+        displayValue.hidden=true;
+        displayUnit.hidden=true;
+        displayClock.hidden=true;
+        readBtn.disabled=true;
+        powerBtn.disabled=false;
+      });
+
+      powerBtn.addEventListener('click',()=>{
+        if(booting) return;
+        if(!deviceOn){
+          deviceOn=true;
+          displayClock.hidden=false;
+          updateClock();
+          bootAnimation();
+        }else{
+          deviceOn=false;
+          readBtn.disabled=true;
+          displayValue.hidden=true;
+          displayUnit.hidden=true;
+          displayClock.hidden=true;
+        }
+      });
+
+      readBtn.addEventListener('click', () => {
+        if (!deviceOn || booting) return;
+        // Codes spéciaux (HI, LO, ERR) => pas d'unité
+        if (['HI', 'LO', 'ERR'].includes(programmedValue)) {
+          displayValue.textContent = programmedValue.split('').join(' ');
+          displayUnit.hidden = true;
+        } else {
+          displayValue.textContent = programmedValue;
+          displayUnit.hidden = false;
+        }
+        displayValue.hidden = false;
+        readBtn.disabled = true;
+      });
+
+      // Mettre à jour l'horloge toutes les 10 s quand l'appareil est allumé
+      setInterval(() => {
+        if (deviceOn && !booting) updateClock();
+      }, 10000);
+    })();
+  </script>
+</body>
+</html>
