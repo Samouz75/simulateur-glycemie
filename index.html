@@ -38,7 +38,7 @@
 <body>
   <div id="setup">
     <h1>Programmer la glycémie</h1>
-    <input id="glyInput" placeholder="Valeur (mg/dL ou HI)" inputmode="text">
+    <input id="glyInput" placeholder="Valeur (mg/dL, HI, LO, ERR)" inputmode="text">
     <br>
     <button id="startBtn" class="btn">Démarrer la simulation</button>
     <div id="setupAlert" class="alert"></div>
@@ -74,7 +74,7 @@
 
       function isValidInput(v){
         v=v.trim().toUpperCase();
-        if(v==='HI'||v==='LO') return true;
+        if(v==='HI'||v==='LO'||v==='ERR') return true;
         return /^\d+(?:[.,]\d{1,2})?$/.test(v);
       }
 
@@ -99,7 +99,7 @@
       startBtn.addEventListener('click',()=>{
         const raw=glyInput.value.trim();
         if(!isValidInput(raw)){
-          setupAlert.textContent='Entrez un nombre valide ou "HI" / "LO"';
+          setupAlert.textContent='Entrez un nombre valide ou "HI" / "LO" / "ERR"';
           return;
         }
         setupAlert.textContent='';
@@ -132,9 +132,14 @@
 
       readBtn.addEventListener('click',()=>{
         if(!deviceOn||booting) return;
-        displayValue.textContent = (programmedValue === 'HI' || programmedValue === 'LO') ? programmedValue.split('').join(' ') : programmedValue;
+        if(['HI','LO','ERR'].includes(programmedValue)){
+          displayValue.textContent = programmedValue.split('').join(' ');
+          displayUnit.hidden = true;
+        }else{
+          displayValue.textContent = programmedValue;
+          displayUnit.hidden = false;
+        }
         displayValue.hidden=false;
-        displayUnit.hidden=false;
         readBtn.disabled=true;
       });
 
